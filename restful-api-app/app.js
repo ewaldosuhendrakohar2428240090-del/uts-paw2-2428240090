@@ -74,7 +74,7 @@
 	  if (index === -1) {
 	    return res.status(404).json({ message: 'Data tidak ditemukan' });
 	  }
-	sf
+	
 	  Pariwisata.splice(index, 1);
 	  res.status(204).send();
 	});
