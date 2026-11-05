@@ -1,7 +1,7 @@
 	const express = require('express');
 	const app = express();
 	const PORT = 3000;
-    
+
     const mongoose = require('mongoose');
 	// Middleware agar req.body (JSON) dapat dibaca
 	app.use(express.json());
@@ -74,7 +74,7 @@
 	  if (index === -1) {
 	    return res.status(404).json({ message: 'Data tidak ditemukan' });
 	  }
-	
+	sf
 	  Pariwisata.splice(index, 1);
 	  res.status(204).send();
 	});
