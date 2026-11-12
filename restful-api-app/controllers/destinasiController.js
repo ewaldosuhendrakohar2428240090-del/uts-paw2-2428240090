@@ -1,108 +1,61 @@
-const destinasi = require('../models/destinasiModel');
+const Destinasi = require('../models/destinasiModel');
 const { errorHttp } = require('../middlewares/errorHandler');
 
-const LIMIT_DEFAULT = 10;
-const LIMIT_MAKS = 50;
-const FIELD_SORT = ['nama', 'nim', 'createdAt'];
-const FIELD_BOLEH_DIPILIH = ['nama', 'nim', 'alamat', 'pengelolaId', 'createdAt'];
-
-// Mengubah bilangan dari query string menjadi bilangan bulat yang aman
-function angkaAman(nilai, bawaan, min, maks) {
-  const n = parseInt(nilai, 10);
-  if (Number.isNaN(n)) return bawaan;
-  return Math.min(Math.max(n, min), maks);
-}
-
-exports.create = async (req, res) => {
+exports.create = async (req, res, next) => {
   try {
-    const destinasi = await destinasi.create(req.body);
-    res.status(201).json(destinasi);
+    // Hanya field dari tabel topik yang diterima dari body; field lain diabaikan
+    const { kode, nama, tarif, hargaTiket, kategori, alamat, pengelolaId } = req.body;
+    const destinasiData = {
+      kode,
+      nama,
+      tarif: tarif !== undefined ? tarif : hargaTiket,
+      kategori,
+      alamat,
+      pengelolaId,
+    };
+
+    const data = await Destinasi.create(destinasiData);
+    res.status(201).json(data);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    next(err);
   }
 };
 
-exports.getAll = async (req, res) => {
-  const filter = {};
-  if (req.query.kota) {
-    filter['alamat.kota'] = String(req.query.kota);
-  }
-  const data = await destinasi.find(filter).populate('pengelolaId');
-  res.json(data);
-};
+exports.getAll = async (req, res, next) => {
+  try {
+    const filter = {};
 
-exports.getById = async (req, res) => {
-  const data = await destinasi.findById(req.params.id).populate('pengelolaId');
-  if (!data) throw errorHttp(404, 'Data tidak ditemukan');
-  res.json(data);
-};
-
-exports.update = async (req, res) => {
-  const data = await destinasi.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    { returnDocument: 'after', runValidators: true }
-  );
-  if (!data) throw errorHttp(404, 'Data tidak ditemukan');
-  res.json(data);
-};
-
-exports.remove = async (req, res) => {
-  const data = await destinasi.findByIdAndDelete(req.params.id);
-  if (!data) throw errorHttp(404, 'Data tidak ditemukan');
-  res.status(204).send();
-};
-
-exports.getAll = async (req, res) => {
-  const filter = {};
-  if (req.query.kota) {
-    filter['alamat.kota'] = String(req.query.kota);
-  }
-  if (req.query.pengelola) {
-    const pengelola = await pengelola.findOne({ kode: String(req.query.pengelola).toUpperCase() });
-    filter.pengelolaId = pengelola ? pengelola._id : { $in: [] };
-  }
-
-  const page = angkaAman(req.query.page, 1, 1, Number.MAX_SAFE_INTEGER);
-  const limit = angkaAman(req.query.limit, LIMIT_DEFAULT, 1, LIMIT_MAKS);
-
-    // Sorting: ?sort=nama (naik) atau ?sort=-nama (turun). Bawaan: terbaru dulu
-  const sortParam = String(req.query.sort || '-createdAt');
-  const arah = sortParam.startsWith('-') ? -1 : 1;
-  const sortField = sortParam.replace(/^-/, '');
-  if (!FIELD_SORT.includes(sortField)) {
-    throw errorHttp(400, `sort hanya boleh: ${FIELD_SORT.join(', ')}`);
-  }
-
-    // Projection: ?fields=nama,nim
-  let select = '';
-  if (req.query.fields) {
-    const fields = String(req.query.fields).split(',').map((f) => f.trim());
-    if (!fields.every((f) => FIELD_BOLEH_DIPILIH.includes(f))) {
-      throw errorHttp(400, `fields hanya boleh: ${FIELD_BOLEH_DIPILIH.join(', ')}`);
+    // Filter dengan query parameter
+    if (req.query.kategori) {
+      filter.kategori = String(req.query.kategori);
     }
-    select = fields.join(' ');
-  }
- const query = destinasi.find(filter)
-    .select(select)
-    .sort({ [sortField]: arah, _id: 1 })
-    .skip((page - 1) * limit)
-    .limit(limit);
+    if (req.query.kota) {
+      filter['alamat.kota'] = String(req.query.kota);
+    }
 
-  // populate() otomatis menambahkan pengelolaId ke hasil, jadi hanya dipanggil
-  // bila pengelolaId memang diminta (atau bila tidak ada pemilihan field)
-  if (!select || select.split(' ').includes('pengelolaId')) {
-    query.populate('pengelolaId', 'kode nama');
-  }
+    let query = Destinasi.find(filter);
 
-  const [data, total] = await Promise.all([query, destinasi.countDocuments(filter)]);
-exports.getAll = async (req, res) => {
-  const filter = {};
-  if (req.query.kota) {
-    filter['alamat.kota'] = String(req.query.kota);
+    // Sorting: bila parameter sort dikirim, data diurutkan menaik berdasarkan field tersebut
+    if (req.query.sort) {
+      const sortField = String(req.query.sort);
+      query = query.sort({ [sortField]: 1 });
+    }
+
+    const data = await query.exec();
+    res.json(data);
+  } catch (err) {
+    next(err);
   }
-  const data = await destinasi.find(filter).populate('pengelolaId');
-  res.json(data);
 };
-  res.json({ data, page, limit, total, totalPages: Math.ceil(total / limit) });
+
+exports.getById = async (req, res, next) => {
+  try {
+    const data = await Destinasi.findById(req.params.id).populate('pengelolaId', 'kode nama');
+    if (!data) {
+      return next(errorHttp(404, 'Destinasi tidak ditemukan'));
+    }
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
 };
